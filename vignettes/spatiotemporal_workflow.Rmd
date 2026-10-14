@@ -1,0 +1,312 @@
+---
+title: "Spatiotemporal Pathway Analysis with SFinxSDFA"
+author: "Morteza Hajihosseini"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+    fig_width: 10
+    fig_height: 5
+vignette: >
+  %\VignetteIndexEntry{Spatiotemporal Pathway Analysis with SFinxSDFA}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse   = TRUE,
+  comment    = "#>",
+  fig.align  = "center",
+  message    = FALSE,
+  warning    = FALSE
+)
+```
+
+## Introduction
+
+Spatial transcriptomics (ST) captures the molecular state of tissue at spatial
+resolution — but biology is not static. Biopsies taken from the same patient
+at different treatment time points (e.g., Baseline, Week 4, Response) reveal
+*where* and *how much* molecular activity changes across tissue space. Standard
+single-time-point analyses miss this temporal dimension entirely.
+
+The **spatiotemporal extension** of `SFinxSDFA` adds:
+
+| Function | Purpose |
+|---|---|
+| `make_st_synthetic()` | Generate multi-condition synthetic ST data for testing |
+| `read_seurat_st()` | Import real Seurat objects (Visium, Xenium, MERFISH, Slide-seq) |
+| `STFA_fit()` | Spatiotemporally varying coefficient GAM across conditions |
+| `plot_stfa_static()` | Publication-ready faceted condition maps |
+| `plot_stfa_interactive()` | Interactive HTML explorer with condition slider |
+| `run_spatiotemporal()` | One-line pipeline orchestrator for pathologists |
+
+This vignette walks through the complete workflow using **synthetic data** —
+no Seurat installation is required.
+
+---
+
+## 1. Setup
+
+```{r load-packages}
+library(SFinxSDFA)
+library(ggplot2)
+library(plotly)
+library(mgcv)
+
+set.seed(42)
+```
+
+---
+
+## 2. Synthetic Multi-Condition Data
+
+`make_st_synthetic()` generates biologically realistic spatial data for three
+clinical conditions. The pathway scores have a spatially structured gradient
+that evolves across conditions — giving the model a real signal to fit.
+
+```{r synthetic-data}
+df <- make_st_synthetic(
+  n_spots    = 150,
+  conditions = c("Baseline", "Week4", "Response"),
+  pathways   = c(
+    "GOBP_REGULATION_OF_NEUTROPHIL_ACTIVATION",
+    "HP_LUPUS_NEPHRITIS"
+  ),
+  seed = 42
+)
+
+# Inspect structure
+str(df)
+head(df[, 1:6])
+```
+
+```{r show-table, echo=FALSE}
+knitr::kable(
+  table(df$Condition),
+  col.names = c("Condition", "Spots"),
+  caption   = "Spots per condition"
+)
+```
+
+The `Condition` column is already a factor, and an `images` attribute holds
+placeholder matrices for histology overlays.
+
+```{r check-images}
+images <- attr(df, "images")
+names(images)  # one entry per condition
+```
+
+---
+
+## 3. Running the Full Pipeline
+
+For most users — especially pathologists — a single call to
+`run_spatiotemporal()` is all that is needed. It handles all steps
+automatically and returns all outputs in one list.
+
+```{r run-pipeline, fig.width=14, fig.height=5}
+result <- run_spatiotemporal(
+  data      = df,
+  response  = "HP_LUPUS_NEPHRITIS",
+  predictor = "GOBP_REGULATION_OF_NEUTROPHIL_ACTIVATION",
+  k         = 8,    # spline basis dimension
+  grid_n    = 25,   # prediction grid resolution (25 × 25)
+  title     = "Lupus Nephritis Dynamics"
+)
+```
+
+The result is a named list with four elements:
+
+```{r result-names}
+names(result)
+```
+
+---
+
+## 4. Interpreting Static Maps
+
+```{r static-plot, fig.width=14, fig.height=5, fig.cap="Spatially varying beta(s) coefficient per condition. White dots indicate spatial locations where the 95% CI excludes zero (statistically significant effect)."}
+print(result$static_plot)
+```
+
+**How to read this figure:**
+
+- Each panel shows the spatially varying coefficient β(s) for one condition.
+- The **plasma colour scale** encodes β magnitude:
+  - Warm colours (yellow/white) → strong positive association.
+  - Cool colours (purple/black) → strong negative association or near zero.
+- **White stipple overlay** marks spatial locations where the 95% confidence
+  interval does not cross zero — i.e., the predictor pathway has a
+  statistically significant local effect on the response pathway.
+- Direct visual comparison across panels reveals *where* the pathway
+  relationship strengthens or reverses during treatment.
+
+Export at publication quality:
+
+```{r save-static, eval=FALSE}
+ggplot2::ggsave(
+  filename = "Lupus_Nephritis_Dynamics_static.png",
+  plot     = result$static_plot,
+  width    = 14,
+  height   = 5,
+  dpi      = 300
+)
+```
+
+---
+
+## 5. Exploring Interactive Plots
+
+### 5a. 2D Heatmap Slider
+
+The interactive 2D explorer lets pathologists scrub through conditions using a
+slider. The white dotted contour shows the significance boundary.
+
+```{r interactive-2d}
+# Already in result$interactive_plot — or build separately:
+p2d <- plot_stfa_interactive(
+  stfa_result = result$model_fit,
+  title       = "Lupus Nephritis Dynamics",
+  mode        = "2d"
+)
+
+# In an interactive session or RMarkdown HTML:
+# print(p2d)
+```
+
+> **For pathologists:** Use the slider at the bottom of the plot to switch
+> between Baseline, Week4, and Response. Regions where the white dotted
+> outline appears are spatially significant. Watch how these regions shift
+> across the treatment course.
+
+### 5b. 3D Surface Explorer
+
+The 3D surface shows the full topography of the β(s) surface — peaks indicate
+where the predictor pathway has its strongest spatial effect on the response.
+
+```{r interactive-3d}
+p3d <- plot_stfa_interactive(
+  stfa_result = result$model_fit,
+  title       = "Lupus Nephritis Dynamics",
+  mode        = "3d"
+)
+
+# print(p3d)
+```
+
+Save as standalone HTML files that can be opened in any browser — no R
+required for viewing:
+
+```{r save-interactive, eval=FALSE}
+htmlwidgets::saveWidget(p2d, "Lupus_Dynamics_2D.html", selfcontained = TRUE)
+htmlwidgets::saveWidget(p3d, "Lupus_Dynamics_3D.html", selfcontained = TRUE)
+```
+
+---
+
+## 6. Inspecting the Fitted Model
+
+The `model_fit` element contains the full `STFA_fit()` output, including the
+fitted `bam` model object for advanced users.
+
+```{r model-summary}
+# Per-condition beta surfaces
+cat("Conditions modelled:", result$model_fit$conditions, "\n")
+cat("Grid dimensions:    ", dim(result$model_fit$beta_surfaces[["Baseline"]]), "\n")
+
+# Range of beta values per condition
+for (cond in result$model_fit$conditions) {
+  brange <- range(result$model_fit$beta_surfaces[[cond]])
+  cat(sprintf("  %s: beta in [%.3f, %.3f]\n", cond, brange[1], brange[2]))
+}
+```
+
+```{r model-summary-full, eval=FALSE}
+# Full GAM model summary (advanced)
+summary(result$model_fit$model)
+```
+
+Significance across the tissue:
+
+```{r sig-summary}
+for (cond in result$model_fit$conditions) {
+  sig_pct <- mean(result$model_fit$significance_masks[[cond]]) * 100
+  cat(sprintf("  %s: %.1f%% of grid cells significant\n", cond, sig_pct))
+}
+```
+
+---
+
+## 7. Saving All Outputs at Once
+
+Pass `output_dir` to `run_spatiotemporal()` to auto-save everything:
+
+```{r save-all, eval=FALSE}
+result <- run_spatiotemporal(
+  data       = df,
+  response   = "HP_LUPUS_NEPHRITIS",
+  predictor  = "GOBP_REGULATION_OF_NEUTROPHIL_ACTIVATION",
+  k          = 8,
+  grid_n     = 25,
+  title      = "Lupus_Nephritis_Dynamics",
+  output_dir = "./SFinxSDFA_outputs"
+)
+# Saves:
+#   ./SFinxSDFA_outputs/Lupus_Nephritis_Dynamics_static.png      (300 dpi)
+#   ./SFinxSDFA_outputs/Lupus_Nephritis_Dynamics_interactive_2d.html
+#   ./SFinxSDFA_outputs/Lupus_Nephritis_Dynamics_interactive_3d.html
+```
+
+---
+
+## 8. Using Real Seurat Data
+
+For real experiments, pass a named list of Seurat objects. The names become
+the condition labels in all downstream analyses.
+
+```{r seurat-example, eval=FALSE}
+# Load your pre-processed Seurat objects (one per condition)
+library(Seurat)
+
+# seurat_baseline <- readRDS("baseline.rds")
+# seurat_week4    <- readRDS("week4.rds")
+# seurat_response <- readRDS("response.rds")
+
+result_real <- run_spatiotemporal(
+  seurat_list = list(
+    Baseline = seurat_baseline,
+    Week4    = seurat_week4,
+    Response = seurat_response
+  ),
+  response    = "HP_LUPUS_NEPHRITIS",
+  predictor   = "GOBP_REGULATION_OF_NEUTROPHIL_ACTIVATION",
+  pathways    = c("HP_LUPUS_NEPHRITIS", "GOBP_REGULATION_OF_NEUTROPHIL_ACTIVATION"),
+  k           = 12,
+  grid_n      = 30,
+  output_dir  = "./results",
+  title       = "Real_Cohort_Analysis",
+  # Optional: extract patient ID from metadata
+  patient_col = "donor_id"
+)
+```
+
+Supported platforms (all handled automatically by `read_seurat_st()`):
+
+| Platform | Seurat object type | Coordinates extracted via |
+|---|---|---|
+| 10x Visium | `VisiumV1` / `VisiumV2` | `GetTissueCoordinates()` |
+| Visium HD | `VisiumV2` | `GetTissueCoordinates()` |
+| Xenium | `FOV` | `GetTissueCoordinates()` |
+| MERFISH | `STARmap` | `GetTissueCoordinates()` |
+| Slide-seq | `SlideSeq` | `GetTissueCoordinates()` |
+
+---
+
+## Session Information
+
+```{r session-info}
+sessionInfo()
+```
