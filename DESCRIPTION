@@ -1,0 +1,54 @@
+Package: SFinxSDFA
+Type: Package
+Title: Spatial Fingerprint Analytics and Spatial Functional Data Analysis
+Version: 0.2.0
+Authors@R:
+    person("Morteza", "Hajihosseini",
+           role  = c("aut", "cre"),
+           email = "mortezahaji87@gmail.com")
+Description: R package for Spatial Fingerprint Analytics (SFinx) and Spatial
+    Functional Data Analysis (SDFA) in spatial transcriptomics data.
+    Reconstructs spatial landscapes, evaluates spatial operators, and fits
+    spatially varying GAM regression models with tensor product splines.
+    Version 0.2.0 adds a spatiotemporal extension: multi-condition longitudinal
+    modeling via spatiotemporally varying coefficient GAMs (STFA_fit),
+    publication-ready faceted condition maps (plot_stfa_static), interactive
+    HTML explorers with condition sliders (plot_stfa_interactive), and a
+    Seurat object adapter supporting Visium, Xenium, MERFISH, and Slide-seq
+    platforms (read_seurat_st). A single-call pipeline orchestrator
+    (run_spatiotemporal) enables pathologists to run the full analysis with
+    minimal R expertise.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports:
+    ggplot2,
+    ggpubr,
+    dplyr,
+    mgcv,
+    automap,
+    gstat,
+    sf,
+    sp,
+    RANN,
+    plot3D,
+    bestNormalize,
+    data.table,
+    gridExtra,
+    viridis,
+    scales,
+    plotly,
+    htmlwidgets,
+    stats,
+    utils
+Suggests:
+    Seurat,
+    SeuratObject,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
+RoxygenNote: 7.3.2
+URL: https://github.com/mortezahaji/SFinxSDFA
+BugReports: https://github.com/mortezahaji/SFinxSDFA/issues
